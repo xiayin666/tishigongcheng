@@ -12,7 +12,7 @@ def get_weather(city: str = "Beijing") -> dict:
     查询指定城市的天气信息
     
     Args:
-        city: 城市名称，默认为北京
+        city: 城市名称，可以是中文或英文，支持全球任意城市
         
     Returns:
         包含天气信息的字典
@@ -20,7 +20,7 @@ def get_weather(city: str = "Beijing") -> dict:
     try:
         from urllib.parse import quote
         
-        # 常见城市名称映射（中文 -> 英文）
+        # 常见城市名称映射（中文 -> 英文）- 作为备选方案
         city_name_map = {
             '北京': 'Beijing',
             '上海': 'Shanghai',
@@ -32,16 +32,87 @@ def get_weather(city: str = "Beijing") -> dict:
             '西安': 'Xi\'an',
             '武汉': 'Wuhan',
             '南京': 'Nanjing',
+            '天津': 'Tianjin',
+            '苏州': 'Suzhou',
+            '青岛': 'Qingdao',
+            '郑州': 'Zhengzhou',
+            '长沙': 'Changsha',
+            '沈阳': 'Shenyang',
+            '济南': 'Jinan',
+            '哈尔滨': 'Harbin',
+            '大连': 'Dalian',
+            '昆明': 'Kunming',
+            '福州': 'Fuzhou',
+            '厦门': 'Xiamen',
+            '南昌': 'Nanchang',
+            '合肥': 'Hefei',
+            '石家庄': 'Shijiazhuang',
+            '南宁': 'Nanning',
+            '贵阳': 'Guiyang',
+            '太原': 'Taiyuan',
+            '长春': 'Changchun',
+            '兰州': 'Lanzhou',
+            '乌鲁木齐': 'Urumqi',
+            '呼和浩特': 'Hohhot',
+            '银川': 'Yinchuan',
+            '西宁': 'Xining',
+            '拉萨': 'Lhasa',
+            '海口': 'Haikou',
+            '三亚': 'Sanya',
+            '宁波': 'Ningbo',
+            '温州': 'Wenzhou',
+            '东莞': 'Dongguan',
+            '佛山': 'Foshan',
+            '珠海': 'Zhuhai',
+            '无锡': 'Wuxi',
+            '常州': 'Changzhou',
+            '徐州': 'Xuzhou',
+            '烟台': 'Yantai',
+            '潍坊': 'Weifang',
+            '洛阳': 'Luoyang',
+            '开封': 'Kaifeng',
+            '桂林': 'Guilin',
+            '柳州': 'Liuzhou',
+            '遵义': 'Zunyi',
+            # 国际城市
+            '纽约': 'New York',
+            '伦敦': 'London',
+            '巴黎': 'Paris',
+            '东京': 'Tokyo',
+            '首尔': 'Seoul',
+            '新加坡': 'Singapore',
+            '悉尼': 'Sydney',
+            '墨尔本': 'Melbourne',
+            '洛杉矶': 'Los Angeles',
+            '旧金山': 'San Francisco',
+            '芝加哥': 'Chicago',
+            '多伦多': 'Toronto',
+            '温哥华': 'Vancouver',
+            '柏林': 'Berlin',
+            '罗马': 'Rome',
+            '马德里': 'Madrid',
+            '莫斯科': 'Moscow',
+            '迪拜': 'Dubai',
+            '曼谷': 'Bangkok',
+            '吉隆坡': 'Kuala Lumpur',
+            '雅加达': 'Jakarta',
+            '孟买': 'Mumbai',
+            '德里': 'Delhi',
+            '开罗': 'Cairo',
+            '约翰内斯堡': 'Johannesburg',
+            '里约热内卢': 'Rio de Janeiro',
+            '圣保罗': 'Sao Paulo',
+            '墨西哥城': 'Mexico City',
         }
         
-        # 如果是中文城市名，转换为英文
+        # 如果是中文城市名，先尝试转换为英文
         search_city = city_name_map.get(city, city)
         encoded_city = quote(search_city)
         
         # 使用 Open-Meteo API（免费，无需API密钥）
-        # 首先获取城市的经纬度
-        conn = HTTPSConnection("geocoding-api.open-meteo.com", timeout=10)
-        conn.request("GET", f"/v1/search?name={encoded_city}&count=5&language=en&format=json")
+        # 首先获取城市的经纬度 - 支持全球任意城市查询
+        conn = HTTPSConnection("geocoding-api.open-meteo.com", timeout=15)
+        conn.request("GET", f"/v1/search?name={encoded_city}&count=10&language=zh&format=json")
         response = conn.getresponse()
         data = response.read().decode('utf-8')
         conn.close()
@@ -56,22 +127,89 @@ def get_weather(city: str = "Beijing") -> dict:
         
         # 选择最匹配的城市（优先选择人口最多的）
         results = geocode_result['results']
-        # 按人口排序，如果没有人口信息则按名称精确匹配
+        if not results:
+            # 如果第一次搜索没有结果，尝试用原始城市名再搜索一次
+            if search_city != city:
+                encoded_original = quote(city)
+                conn = HTTPSConnection("geocoding-api.open-meteo.com", timeout=15)
+                conn.request("GET", f"/v1/search?name={encoded_original}&count=10&language=zh&format=json")
+                response = conn.getresponse()
+                data = response.read().decode('utf-8')
+                conn.close()
+                
+                if response.status == 200:
+                    retry_result = json.loads(data)
+                    if retry_result.get('results'):
+                        results = retry_result['results']
+        
+        if not results:
+            return {"error": f"未找到城市: {city}，请尝试使用其他城市名称"}
+        
+        # 按相关性和人口排序，选择最佳匹配
         results_with_population = []
         for loc in results:
-            # 检查是否是主要城市（有人口数据或者是省会/直辖市）
-            has_population = 'population' in loc
-            is_capital = loc.get('admin1_id') == loc.get('admin2_id')  # 直辖市
-            name_exact_match = loc['name'] == city or loc['name'].lower() == city.lower()
-            
-            # 计算优先级分数
+            # 计算匹配分数
             score = 0
-            if has_population:
-                score += loc.get('population', 0)
-            if is_capital:
-                score += 10000000  # 首都/直辖市优先
-            if name_exact_match:
-                score += 5000000  # 名称完全匹配优先
+            
+            # 人口权重（限制最大值避免过大影响）
+            if 'population' in loc:
+                population = loc.get('population', 0)
+                # 对于大城市给予更高权重
+                if population > 1000000:
+                    score += min(population, 50000000) * 2  # 百万以上人口城市加倍
+                else:
+                    score += min(population, 10000000)
+            
+            # 行政级别权重（省会/直辖市/州府优先）
+            admin_level = loc.get('admin1_id', '')
+            if admin_level and loc.get('admin2_id') == admin_level:
+                score += 5000000  # 直辖市/省会加分
+            
+            # 名称精确匹配权重
+            loc_name = loc.get('name', '').lower()
+            search_lower = search_city.lower()
+            original_lower = city.lower()
+            
+            if loc_name == search_lower or loc_name == original_lower:
+                score += 8000000  # 完全匹配高分
+            elif search_lower in loc_name or original_lower in loc_name:
+                score += 3000000  # 部分匹配中等分
+            
+            # 国家匹配权重（根据搜索词判断）
+            country_code = loc.get('country_code', '').upper()
+            country_name = loc.get('country', '').lower()
+            
+            # 如果搜索词包含国家信息，优先匹配
+            if '美国' in city or 'usa' in search_lower or 'us' in search_lower:
+                if country_code in ['US']:
+                    score += 10000000  # 美国城市高优先级
+            elif '英国' in city or 'uk' in search_lower or 'britain' in search_lower:
+                if country_code in ['GB', 'UK']:
+                    score += 10000000
+            elif '中国' in city or 'cn' in search_lower or 'china' in search_lower:
+                if country_code in ['CN', 'TW', 'HK', 'MO']:
+                    score += 10000000
+            else:
+                # 默认情况下，对常见国家的城市给予适度加分
+                if country_code in ['CN', 'TW', 'HK', 'MO']:
+                    score += 1000000  # 中国地区加分
+                elif country_code in ['US']:
+                    score += 800000   # 美国地区加分
+                elif country_code in ['GB', 'UK']:
+                    score += 600000   # 英国地区加分
+                elif country_code in ['JP']:
+                    score += 500000   # 日本地区加分
+                elif country_code in ['KR']:
+                    score += 400000   # 韩国地区加分
+            
+            # 对于知名国际大都市额外加分
+            major_cities = [
+                'new york', 'london', 'paris', 'tokyo', 'beijing', 'shanghai',
+                'los angeles', 'chicago', 'hong kong', 'singapore', 'sydney',
+                'moscow', 'berlin', 'rome', 'madrid', 'dubai', 'bangkok'
+            ]
+            if loc_name in major_cities and population and population > 5000000:
+                score += 3000000  # 国际大都市加分
             
             results_with_population.append((score, loc))
         
@@ -185,13 +323,13 @@ WEATHER_TOOL_DEFINITION = {
     "type": "function",
     "function": {
         "name": "get_weather",
-        "description": "查询指定城市的当前天气和未来几天天气预报",
+        "description": "查询全球任意城市的当前天气和未来几天天气预报，支持中文和英文城市名称",
         "parameters": {
             "type": "object",
             "properties": {
                 "city": {
                     "type": "string",
-                    "description": "要查询天气的城市名称，例如：北京、上海、广州等"
+                    "description": "要查询天气的城市名称，可以是中文或英文，例如：北京、上海、New York、London等"
                 }
             },
             "required": ["city"]

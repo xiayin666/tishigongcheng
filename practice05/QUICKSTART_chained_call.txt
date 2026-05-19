@@ -1,0 +1,238 @@
+# 链式调用快速开始
+
+## 5分钟上手指南
+
+### 1. 基本使用
+
+```python
+from practice05.chained_call_executor import execute_chained_tool_call, load_env_vars
+import os
+
+# 加载环境变量
+env_vars = load_env_vars('.env')
+for key, value in env_vars.items():
+    os.environ[key] = value
+
+# 执行链式调用
+result = execute_chained_tool_call(
+    env_vars, 
+    "帮我查询北京的天气",
+    max_iterations=5
+)
+
+if result["success"]:
+    print(result["result"])
+```
+
+### 2. 查看执行过程
+
+```python
+result = execute_chained_tool_call(
+    env_vars, 
+    "查询北京和上海天气，比较哪个更适合出行",
+    max_iterations=8,
+    verbose=True  # 开启详细输出
+)
+
+# 访问上下文信息
+context = result["context"]
+print(f"迭代次数: {context.current_iteration}")
+print(f"工具调用: {len(context.call_history)} 次")
+```
+
+### 3. 使用中间变量
+
+```python
+from practice05.chained_call_context import ChainedCallContext
+
+context = ChainedCallContext(max_iterations=10)
+
+# 存储数据
+context.set_variable("weather_data", {...})
+context.set_variable("city_name", "Beijing")
+
+# 获取数据
+data = context.get_variable("weather_data")
+
+# 查看所有变量
+all_vars = context.get_all_variables()
+```
+
+### 4. 手动管理上下文
+
+```python
+context = ChainedCallContext(max_iterations=5)
+
+while context.can_continue():
+    context.next_iteration()
+    
+    # 执行你的逻辑...
+    
+    # 记录步骤
+    context.add_call_record({
+        "tool_name": "my_tool",
+        "arguments": {...},
+        "result": {...},
+        "success": True
+    })
+    
+    # 完成任务
+    if done:
+        context.complete("最终结果")
+        break
+
+# 检查结果
+if context.is_completed:
+    print(context.final_result)
+else:
+    print(f"错误: {context.error}")
+```
+
+## 常见场景
+
+### 场景1: 多步查询
+
+```python
+# 查询多个城市天气并比较
+result = execute_chained_tool_call(
+    env_vars,
+    "帮我查北京、上海、广州的天气，告诉我哪里最暖和",
+    max_iterations=10
+)
+```
+
+### 场景2: 条件判断
+
+```python
+# 根据天气决定活动类型
+result = execute_chained_tool_call(
+    env_vars,
+    "先查北京天气，如果晴天就写户外活动通知，雨天写室内活动通知",
+    max_iterations=8
+)
+```
+
+### 场景3: 组合任务
+
+```python
+# 结合知识库和通知撰写
+result = execute_chained_tool_call(
+    env_vars,
+    "查询公司团建规范文档，然后根据规范写一个团建通知",
+    max_iterations=10
+)
+```
+
+## 调试技巧
+
+### 1. 开启详细模式
+
+```python
+result = execute_chained_tool_call(
+    env_vars,
+    user_request,
+    verbose=True  # 显示每一步的执行细节
+)
+```
+
+### 2. 检查调用历史
+
+```python
+context = result["context"]
+for step in context.call_history:
+    print(f"工具: {step['tool_name']}")
+    print(f"参数: {step['arguments']}")
+    print(f"结果: {step['result']}")
+```
+
+### 3. 查看中间变量
+
+```python
+for key, value in context.variables.items():
+    print(f"{key}: {value}")
+```
+
+### 4. 获取执行摘要
+
+```python
+summary = context.get_summary()
+print(summary)
+# 输出:
+# {
+#   "current_iteration": 3,
+#   "max_iterations": 10,
+#   "is_completed": True,
+#   "total_steps": 2,
+#   ...
+# }
+```
+
+## 常见问题
+
+### Q1: 如何设置最大迭代次数？
+
+```python
+# 在创建时设置
+context = ChainedCallContext(max_iterations=5)
+
+# 或在执行函数中设置
+result = execute_chained_tool_call(
+    env_vars,
+    request,
+    max_iterations=5
+)
+```
+
+### Q2: 如何添加自定义工具？
+
+在 `chained_call_executor.py` 中添加：
+
+```python
+# 1. 导入你的工具函数
+from my_module import my_tool
+
+# 2. 添加到可用函数字典
+ALL_AVAILABLE_FUNCTIONS["my_tool"] = my_tool
+
+# 3. 添加工具定义
+MY_TOOL_DEF = {
+    "type": "function",
+    "function": {
+        "name": "my_tool",
+        "description": "工具描述",
+        "parameters": {...}
+    }
+}
+ALL_TOOLS_DEFINITION.append(MY_TOOL_DEF)
+```
+
+### Q3: 如何处理错误？
+
+```python
+result = execute_chained_tool_call(env_vars, request)
+
+if not result["success"]:
+    print(f"错误: {result['error']}")
+    print(f"上下文: {result['context']}")
+```
+
+### Q4: 如何保存和恢复上下文？
+
+```python
+# 保存
+data = context.to_dict()
+import json
+with open('context.json', 'w') as f:
+    json.dump(data, f)
+
+# 恢复
+with open('context.json', 'r') as f:
+    data = json.load(f)
+context = ChainedCallContext.from_dict(data)
+```
+
+## 下一步
+
+- 查看 `README_chained_call.txt` 了解完整文档
+- 运行 `example_chained_call.py` 查看更多示例
+- 运行 `test_chained_call.py` 了解测试用例

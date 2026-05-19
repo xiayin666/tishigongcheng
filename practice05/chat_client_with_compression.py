@@ -1,6 +1,6 @@
 """
-支持聊天记录压缩的智能对话客户端
-基于practice02的chat_client.py扩展，增加上下文管理和自动压缩功能
+支持聊天记录压缩和 Notice Skill 的智能对话客户端
+基于practice04的chat_client_with_compression.py扩展，增加通知撰写功能
 """
 import os
 import json
@@ -10,9 +10,19 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from practice02.file_tools import AVAILABLE_FUNCTIONS, TOOLS_DEFINITION
+from practice04.anythingllm_tool import anythingllm_query, ANYTHINGLLM_TOOL_DEFINITION
+from practice05.notice_skill_tool import generate_company_notice, NOTICE_SKILL_TOOL_DEFINITION
 from practice03.chat_history import ChatHistoryManager
 from practice03.chat_compressor import compress_chat_history, should_compress
 from practice03.chat_log_manager import ChatLogManager, extract_key_info_from_summary, search_chat_history
+
+# 合并所有工具定义
+ALL_TOOLS_DEFINITION = TOOLS_DEFINITION + [ANYTHINGLLM_TOOL_DEFINITION] + [NOTICE_SKILL_TOOL_DEFINITION]
+
+# 合并所有可用函数
+ALL_AVAILABLE_FUNCTIONS = AVAILABLE_FUNCTIONS.copy()
+ALL_AVAILABLE_FUNCTIONS["anythingllm_query"] = anythingllm_query
+ALL_AVAILABLE_FUNCTIONS["generate_company_notice"] = generate_company_notice
 
 
 def load_env_file(filepath='.env'):
@@ -49,7 +59,7 @@ def call_llm_with_tools(base_url, model, api_key, messages, tools=None):
     Returns:
         LLM响应结果
     """
-    from http.client import HTTPConnection
+    from http.client import HTTPConnection, HTTPSConnection
     from urllib.parse import urlparse
     
     # 解析URL
@@ -79,8 +89,11 @@ def call_llm_with_tools(base_url, model, api_key, messages, tools=None):
     }
     
     try:
-        # 创建HTTP连接
-        conn = HTTPConnection(host, port, timeout=60)
+        # 根据协议选择连接类型
+        if parsed_url.scheme == 'https':
+            conn = HTTPSConnection(host, port, timeout=60)
+        else:
+            conn = HTTPConnection(host, port, timeout=60)
         
         # 发送POST请求
         conn.request('POST', path, body=body, headers=headers)
@@ -117,11 +130,11 @@ def execute_function_call(function_name, arguments):
     Returns:
         函数执行结果
     """
-    if function_name not in AVAILABLE_FUNCTIONS:
+    if function_name not in ALL_AVAILABLE_FUNCTIONS:
         return {"error": f"未知的函数: {function_name}"}
     
     try:
-        func = AVAILABLE_FUNCTIONS[function_name]
+        func = ALL_AVAILABLE_FUNCTIONS[function_name]
         result = func(**arguments)
         return result
     except Exception as e:
@@ -173,9 +186,19 @@ def chat_with_context(env_vars, user_input, history_manager, log_manager=None):
 天气查询工具：
 6. get_weather - 查询指定城市的当前天气和未来几天预报
 
-当用户请求执行文件操作或查询天气时，请使用相应的工具。使用工具时，请提供准确的参数。
-如果工具返回错误信息，请向用户说明情况。
-对于文件路径，如果用户提供的是相对路径，请基于当前工作目录理解。"""
+知识库查询工具：
+7. anythingllm_query - 向 AnythingLLM 知识库系统发送查询，获取基于文档的专业回答。当用户询问公司内部文档、项目资料、技术文档、知识库内容时使用此工具。
+
+通知撰写工具：
+8. generate_company_notice - 生成公司正式通知文档。当用户请求撰写通知、公告、放假安排等公文时使用此工具。可以识别用户是否提供了部门信息，并相应调整通知开头格式。
+
+使用指南：
+- 当用户请求执行文件操作或查询天气时，请使用相应的工具
+- 当用户询问关于公司文档、项目资料、技术规范、知识库内容等问题时，请使用 anythingllm_query 工具
+- 当用户请求撰写通知、公告等公文时，请使用 generate_company_notice 工具
+- 使用工具时，请提供准确的参数
+- 如果工具返回错误信息，请向用户说明情况
+- 对于文件路径，如果用户提供的是相对路径，请基于当前工作目录理解"""
         }
         history_manager.add_message("system", system_message["content"])
     
@@ -217,9 +240,19 @@ def chat_with_context(env_vars, user_input, history_manager, log_manager=None):
 天气查询工具：
 6. get_weather - 查询指定城市的当前天气和未来几天预报
 
-当用户请求执行文件操作或查询天气时，请使用相应的工具。使用工具时，请提供准确的参数。
-如果工具返回错误信息，请向用户说明情况。
-对于文件路径，如果用户提供的是相对路径，请基于当前工作目录理解。"""
+知识库查询工具：
+7. anythingllm_query - 向 AnythingLLM 知识库系统发送查询，获取基于文档的专业回答。当用户询问公司内部文档、项目资料、技术文档、知识库内容时使用此工具。
+
+通知撰写工具：
+8. generate_company_notice - 生成公司正式通知文档。当用户请求撰写通知、公告、放假安排等公文时使用此工具。可以识别用户是否提供了部门信息，并相应调整通知开头格式。
+
+使用指南：
+- 当用户请求执行文件操作或查询天气时，请使用相应的工具
+- 当用户询问关于公司文档、项目资料、技术规范、知识库内容等问题时，请使用 anythingllm_query 工具
+- 当用户请求撰写通知、公告等公文时，请使用 generate_company_notice 工具
+- 使用工具时，请提供准确的参数
+- 如果工具返回错误信息，请向用户说明情况
+- 对于文件路径，如果用户提供的是相对路径，请基于当前工作目录理解"""
             }
             history_manager.add_message("system", system_message["content"])
             
@@ -241,7 +274,7 @@ def chat_with_context(env_vars, user_input, history_manager, log_manager=None):
     print("=" * 60)
     
     # 第一次调用 LLM
-    response = call_llm_with_tools(base_url, model, api_key, messages, TOOLS_DEFINITION)
+    response = call_llm_with_tools(base_url, model, api_key, messages, ALL_TOOLS_DEFINITION)
     
     if not response:
         print("LLM 调用失败")
@@ -291,7 +324,7 @@ def chat_with_context(env_vars, user_input, history_manager, log_manager=None):
         
         # 第二次调用 LLM，传入工具执行结果
         messages = history_manager.get_messages()
-        final_response = call_llm_with_tools(base_url, model, api_key, messages, TOOLS_DEFINITION)
+        final_response = call_llm_with_tools(base_url, model, api_key, messages, ALL_TOOLS_DEFINITION)
         
         if final_response:
             final_choice = final_response.get('choices', [{}])[0]
@@ -329,6 +362,10 @@ def main():
         print(f"错误: {e}")
         return
     
+    # 将环境变量设置到系统中，供工具使用
+    for key, value in env_vars.items():
+        os.environ[key] = value
+    
     base_url = env_vars.get('BASE_URL')
     model = env_vars.get('MODEL')
     api_key = env_vars.get('API_KEY')
@@ -338,60 +375,42 @@ def main():
         return
     
     print("="*60)
-    print("智能助手 - 支持聊天记录自动压缩和日志提取")
+    print("智能助手 - 支持聊天记录自动压缩、日志提取和通知撰写")
     print("="*60)
-    print("\n功能特点:")
-    print("  ✓ 支持多轮对话上下文")
-    print("  ✓ 自动检测对话轮数和上下文长度")
-    print("  ✓ 超过5轮或3000字符时自动压缩历史")
-    print("  ✓ 保留最近30%的原始对话内容")
-    print("  ✓ 自动从压缩记录中提取5W关键信息")
-    print("  ✓ 支持搜索聊天历史 (/search 关键词)")
-    print("\n可用工具:")
-    print("  1. list_files - 列出目录文件")
-    print("  2. rename_file - 重命名文件")
-    print("  3. delete_file - 删除文件")
-    print("  4. create_file_with_content - 创建文件")
-    print("  5. read_file_content - 读取文件")
-    print("  6. get_weather - 查询天气")
-    print("\n示例问题:")
-    print("  - 列出当前目录下的所有文件")
-    print("  - 北京今天的天气怎么样？")
-    print("  - /search 天气 (搜索历史记录)")
-    print("  - 查找聊天历史中关于文件的内容")
-    print("-" * 60)
+    print("可用工具：")
+    print("  - 文件管理（list_files, rename_file, delete_file, create_file, read_file）")
+    print("  - 天气查询（get_weather）")
+    print("  - 知识库查询（anythingllm_query）")
+    print("  - 通知撰写（generate_company_notice）")
+    print("特殊命令：")
+    print("  - /search <关键词> - 搜索聊天历史")
+    print("  - /quit 或 /exit - 退出程序")
+    print("="*60)
     
-    # 创建聊天记录管理器
+    # 初始化聊天记录管理器
     history_manager = ChatHistoryManager()
     
-    # 创建日志管理器
+    # 初始化日志管理器
     log_manager = ChatLogManager()
     
-    # 交互式对话
     while True:
         try:
-            user_input = input("\n请输入你的问题 (输入 'quit' 或 'exit' 退出, 'clear' 清空历史): ")
-            if user_input.lower() in ['quit', 'exit', 'q']:
-                print("再见!")
+            user_input = input("\n请输入您的问题（输入/quit退出）：").strip()
+            
+            if not user_input:
+                continue
+            
+            # 检查退出命令
+            if user_input.lower() in ['/quit', '/exit', 'quit', 'exit']:
+                print("\n感谢使用，再见！")
                 break
             
-            if user_input.lower() in ['clear', 'cls']:
-                history_manager.clear_history()
-                print("聊天记录已清空")
-                continue
-            
-            if not user_input.strip():
-                continue
-            
-            # 显示当前状态
-            round_count = history_manager.get_round_count()
-            context_length = history_manager.get_context_length()
-            print(f"\n[当前状态] 对话轮数: {round_count}, 上下文长度: {context_length} 字符")
-            
+            # 处理对话
             chat_with_context(env_vars, user_input, history_manager, log_manager)
             
         except KeyboardInterrupt:
-            print("\n\n再见!")
+            print("\n\n程序被用户中断")
+            print("感谢使用，再见！")
             break
         except Exception as e:
             print(f"\n发生错误: {str(e)}")
@@ -399,5 +418,5 @@ def main():
             traceback.print_exc()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

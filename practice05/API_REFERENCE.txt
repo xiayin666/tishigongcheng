@@ -1,0 +1,527 @@
+# API 参考文档
+
+## ChainedCallContext 类
+
+### 构造函数
+
+```python
+ChainedCallContext(max_iterations: int = 10)
+```
+
+**参数**:
+- `max_iterations` (int): 最大迭代次数，默认10
+
+**示例**:
+```python
+context = ChainedCallContext(max_iterations=5)
+```
+
+---
+
+### 方法
+
+#### add_call_record(step_info: Dict[str, Any])
+
+添加调用记录到历史。
+
+**参数**:
+- `step_info` (Dict): 步骤信息字典，包含：
+  - `tool_name`: 工具名称
+  - `arguments`: 参数字典
+  - `result`: 执行结果（可选）
+  - `error`: 错误信息（可选）
+  - `success`: 是否成功
+
+**示例**:
+```python
+context.add_call_record({
+    "tool_name": "get_weather",
+    "arguments": {"city": "Beijing"},
+    "result": {"temperature": "20°C"},
+    "success": True
+})
+```
+
+---
+
+#### set_variable(key: str, value: Any)
+
+设置中间变量。
+
+**参数**:
+- `key` (str): 变量名
+- `value` (Any): 变量值
+
+**示例**:
+```python
+context.set_variable("weather_data", {...})
+context.set_variable("city_name", "Beijing")
+```
+
+---
+
+#### get_variable(key: str, default=None) -> Any
+
+获取中间变量。
+
+**参数**:
+- `key` (str): 变量名
+- `default` (Any): 默认值，如果变量不存在则返回此值
+
+**返回**:
+- 变量值或默认值
+
+**示例**:
+```python
+data = context.get_variable("weather_data")
+city = context.get_variable("city_name", "Unknown")
+```
+
+---
+
+#### get_all_variables() -> Dict[str, Any]
+
+获取所有中间变量。
+
+**返回**:
+- 所有变量的字典副本
+
+**示例**:
+```python
+all_vars = context.get_all_variables()
+for key, value in all_vars.items():
+    print(f"{key}: {value}")
+```
+
+---
+
+#### can_continue() -> bool
+
+检查是否可以继续迭代。
+
+**返回**:
+- `True`: 可以继续
+- `False`: 应该停止（已完成、出错或达到最大迭代次数）
+
+**示例**:
+```python
+while context.can_continue():
+    # 执行逻辑
+    context.next_iteration()
+```
+
+---
+
+#### next_iteration()
+
+进入下一次迭代，增加当前迭代计数。
+
+**示例**:
+```python
+context.next_iteration()
+print(f"当前迭代: {context.current_iteration}")
+```
+
+---
+
+#### complete(result: str)
+
+标记任务完成。
+
+**参数**:
+- `result` (str): 最终结果文本
+
+**示例**:
+```python
+context.complete("任务已成功完成")
+```
+
+---
+
+#### fail(error_message: str)
+
+标记任务失败。
+
+**参数**:
+- `error_message` (str): 错误信息
+
+**示例**:
+```python
+context.fail("发生了一个错误")
+```
+
+---
+
+#### get_summary() -> Dict[str, Any]
+
+获取上下文摘要信息。
+
+**返回**:
+- 摘要字典，包含：
+  - `current_iteration`: 当前迭代次数
+  - `max_iterations`: 最大迭代次数
+  - `is_completed`: 是否完成
+  - `has_error`: 是否有错误
+  - `error`: 错误信息
+  - `total_steps`: 总步骤数
+  - `variables_count`: 变量数量
+  - `final_result`: 最终结果
+
+**示例**:
+```python
+summary = context.get_summary()
+print(f"迭代: {summary['current_iteration']}/{summary['max_iterations']}")
+print(f"步骤数: {summary['total_steps']}")
+```
+
+---
+
+#### to_dict() -> Dict[str, Any]
+
+将上下文序列化为字典。
+
+**返回**:
+- 包含所有状态信息的字典
+
+**示例**:
+```python
+import json
+data = context.to_dict()
+with open('context.json', 'w') as f:
+    json.dump(data, f)
+```
+
+---
+
+#### from_dict(data: Dict[str, Any]) -> ChainedCallContext
+
+从字典恢复上下文（类方法）。
+
+**参数**:
+- `data` (Dict): 上下文字典
+
+**返回**:
+- ChainedCallContext 实例
+
+**示例**:
+```python
+import json
+with open('context.json', 'r') as f:
+    data = json.load(f)
+context = ChainedCallContext.from_dict(data)
+```
+
+---
+
+### 属性
+
+- `max_iterations` (int): 最大迭代次数
+- `current_iteration` (int): 当前迭代次数
+- `call_history` (List[Dict]): 调用历史记录
+- `variables` (Dict[str, Any]): 中间变量
+- `final_result` (Optional[str]): 最终结果
+- `is_completed` (bool): 是否完成
+- `error` (Optional[str]): 错误信息
+
+---
+
+## execute_chained_tool_call 函数
+
+### 函数签名
+
+```python
+def execute_chained_tool_call(
+    env_vars: Dict[str, str],
+    user_request: str,
+    system_prompt: str = None,
+    max_iterations: int = 10,
+    verbose: bool = True
+) -> Dict[str, Any]
+```
+
+### 参数
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `env_vars` | Dict[str, str] | 是 | - | 环境变量字典，必须包含 BASE_URL, MODEL, API_KEY |
+| `user_request` | str | 是 | - | 用户的请求文本 |
+| `system_prompt` | str | 否 | None | 系统提示词，None时使用默认提示词 |
+| `max_iterations` | int | 否 | 10 | 最大迭代次数 |
+| `verbose` | bool | 否 | True | 是否输出详细信息 |
+
+### 返回值
+
+```python
+{
+    "success": bool,           # 是否成功
+    "result": Optional[str],   # 最终结果文本
+    "context": ChainedCallContext,  # 上下文对象
+    "error": Optional[str]     # 错误信息
+}
+```
+
+### 使用示例
+
+#### 基础用法
+
+```python
+from practice05.chained_call_executor import execute_chained_tool_call, load_env_vars
+import os
+
+env_vars = load_env_vars('.env')
+for k, v in env_vars.items():
+    os.environ[k] = v
+
+result = execute_chained_tool_call(
+    env_vars,
+    "帮我查询北京的天气"
+)
+
+if result["success"]:
+    print(result["result"])
+else:
+    print(f"错误: {result['error']}")
+```
+
+#### 自定义配置
+
+```python
+result = execute_chained_tool_call(
+    env_vars,
+    "复杂的多步任务",
+    system_prompt="你是一个专业的助手...",
+    max_iterations=15,
+    verbose=False
+)
+```
+
+#### 访问上下文
+
+```python
+result = execute_chained_tool_call(env_vars, request)
+
+if result["success"]:
+    context = result["context"]
+    
+    # 查看执行统计
+    print(f"迭代次数: {context.current_iteration}")
+    print(f"工具调用: {len(context.call_history)}")
+    
+    # 查看调用历史
+    for step in context.call_history:
+        print(f"工具: {step['tool_name']}")
+        print(f"结果: {step['result']}")
+    
+    # 查看中间变量
+    for key, value in context.variables.items():
+        print(f"{key}: {value}")
+```
+
+---
+
+## load_env_vars 函数
+
+### 函数签名
+
+```python
+def load_env_vars(filepath: str = '.env') -> Dict[str, str]
+```
+
+### 参数
+
+- `filepath` (str): .env 文件路径，默认为 '.env'
+
+### 返回值
+
+- Dict[str, str]: 环境变量字典
+
+### 使用示例
+
+```python
+env_vars = load_env_vars('.env')
+print(env_vars)
+# {'BASE_URL': '...', 'MODEL': '...', 'API_KEY': '...'}
+```
+
+---
+
+## 完整工作流程示例
+
+```python
+from practice05.chained_call_executor import execute_chained_tool_call, load_env_vars
+from practice05.chained_call_context import ChainedCallContext
+import os
+
+# 1. 加载环境变量
+env_vars = load_env_vars('.env')
+for k, v in env_vars.items():
+    os.environ[k] = v
+
+# 2. 执行链式调用
+user_request = "查询北京和上海的天气，比较哪个更适合周末出游"
+
+result = execute_chained_tool_call(
+    env_vars,
+    user_request,
+    max_iterations=8,
+    verbose=True
+)
+
+# 3. 处理结果
+if result["success"]:
+    print("✅ 任务完成")
+    print(f"\n结果:\n{result['result']}")
+    
+    # 4. 分析执行过程
+    context = result["context"]
+    summary = context.get_summary()
+    
+    print(f"\n执行统计:")
+    print(f"  迭代次数: {summary['current_iteration']}")
+    print(f"  工具调用: {summary['total_steps']} 次")
+    print(f"  中间变量: {summary['variables_count']} 个")
+    
+    # 5. 查看详细历史
+    print(f"\n调用历史:")
+    for i, step in enumerate(context.call_history, 1):
+        print(f"\n步骤 {i}:")
+        print(f"  工具: {step['tool_name']}")
+        print(f"  成功: {step['success']}")
+        if step.get('result'):
+            print(f"  结果: {step['result']}")
+else:
+    print(f"❌ 任务失败: {result['error']}")
+```
+
+---
+
+## 错误处理
+
+### 常见错误
+
+1. **环境变量缺失**
+```python
+result = execute_chained_tool_call(env_vars, request)
+if not result["success"]:
+    if "缺少必要的环境变量" in result["error"]:
+        print("请检查 .env 文件配置")
+```
+
+2. **达到最大迭代次数**
+```python
+if result["context"].error and "达到最大迭代次数" in result["context"].error:
+    print("任务太复杂，请增加 max_iterations 参数")
+```
+
+3. **工具执行失败**
+```python
+context = result["context"]
+for step in context.call_history:
+    if not step["success"]:
+        print(f"工具 {step['tool_name']} 失败: {step['error']}")
+```
+
+### 最佳实践
+
+```python
+try:
+    result = execute_chained_tool_call(
+        env_vars,
+        request,
+        max_iterations=10,
+        verbose=True
+    )
+    
+    if result["success"]:
+        # 处理成功结果
+        process_result(result)
+    else:
+        # 处理失败
+        handle_error(result)
+        
+except Exception as e:
+    # 处理异常
+    print(f"发生异常: {str(e)}")
+    import traceback
+    traceback.print_exc()
+```
+
+---
+
+## 性能考虑
+
+### 建议配置
+
+- **简单任务**: max_iterations = 3-5
+- **中等任务**: max_iterations = 5-8
+- **复杂任务**: max_iterations = 8-15
+
+### 优化技巧
+
+1. **减少迭代次数**
+   - 提供清晰的系统提示词
+   - 明确任务目标
+
+2. **合理使用中间变量**
+   - 存储关键信息避免重复查询
+   - 及时清理不需要的变量
+
+3. **Verbose模式**
+   - 开发时开启便于调试
+   - 生产环境可关闭提升性能
+
+---
+
+## 扩展开发
+
+### 添加新工具
+
+```python
+# 1. 在 chained_call_executor.py 中导入
+from my_module import my_custom_tool
+
+# 2. 添加到可用函数字典
+ALL_AVAILABLE_FUNCTIONS["my_custom_tool"] = my_custom_tool
+
+# 3. 定义工具
+MY_TOOL_DEF = {
+    "type": "function",
+    "function": {
+        "name": "my_custom_tool",
+        "description": "工具描述",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "param1": {
+                    "type": "string",
+                    "description": "参数1描述"
+                }
+            },
+            "required": ["param1"]
+        }
+    }
+}
+
+# 4. 添加到工具定义列表
+ALL_TOOLS_DEFINITION.append(MY_TOOL_DEF)
+```
+
+### 自定义变量提取
+
+```python
+# 在 execute_tool_call 函数中添加
+if result["success"] and result["result"]:
+    if function_name == "my_custom_tool":
+        # 提取关键信息
+        context.set_variable("custom_data", result["result"]["important_field"])
+```
+
+---
+
+## 更多信息
+
+- 完整文档: `README_chained_call.txt`
+- 快速开始: `QUICKSTART_chained_call.txt`
+- 使用示例: `example_chained_call.py`
+- 测试用例: `test_chained_call.py`
+- 交互式演示: `interactive_demo.py`

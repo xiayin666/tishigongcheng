@@ -10,9 +10,17 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from practice02.file_tools import AVAILABLE_FUNCTIONS, TOOLS_DEFINITION
+from practice04.anythingllm_tool import anythingllm_query, ANYTHINGLLM_TOOL_DEFINITION
 from practice03.chat_history import ChatHistoryManager
 from practice03.chat_compressor import compress_chat_history, should_compress
 from practice03.chat_log_manager import ChatLogManager, extract_key_info_from_summary, search_chat_history
+
+# 合并所有工具定义
+ALL_TOOLS_DEFINITION = TOOLS_DEFINITION + [ANYTHINGLLM_TOOL_DEFINITION]
+
+# 合并所有可用函数
+ALL_AVAILABLE_FUNCTIONS = AVAILABLE_FUNCTIONS.copy()
+ALL_AVAILABLE_FUNCTIONS["anythingllm_query"] = anythingllm_query
 
 
 def load_env_file(filepath='.env'):
@@ -49,7 +57,7 @@ def call_llm_with_tools(base_url, model, api_key, messages, tools=None):
     Returns:
         LLM响应结果
     """
-    from http.client import HTTPConnection
+    from http.client import HTTPConnection, HTTPSConnection
     from urllib.parse import urlparse
     
     # 解析URL
@@ -79,8 +87,11 @@ def call_llm_with_tools(base_url, model, api_key, messages, tools=None):
     }
     
     try:
-        # 创建HTTP连接
-        conn = HTTPConnection(host, port, timeout=60)
+        # 根据协议选择连接类型
+        if parsed_url.scheme == 'https':
+            conn = HTTPSConnection(host, port, timeout=60)
+        else:
+            conn = HTTPConnection(host, port, timeout=60)
         
         # 发送POST请求
         conn.request('POST', path, body=body, headers=headers)
@@ -117,11 +128,11 @@ def execute_function_call(function_name, arguments):
     Returns:
         函数执行结果
     """
-    if function_name not in AVAILABLE_FUNCTIONS:
+    if function_name not in ALL_AVAILABLE_FUNCTIONS:
         return {"error": f"未知的函数: {function_name}"}
     
     try:
-        func = AVAILABLE_FUNCTIONS[function_name]
+        func = ALL_AVAILABLE_FUNCTIONS[function_name]
         result = func(**arguments)
         return result
     except Exception as e:
@@ -173,9 +184,15 @@ def chat_with_context(env_vars, user_input, history_manager, log_manager=None):
 天气查询工具：
 6. get_weather - 查询指定城市的当前天气和未来几天预报
 
-当用户请求执行文件操作或查询天气时，请使用相应的工具。使用工具时，请提供准确的参数。
-如果工具返回错误信息，请向用户说明情况。
-对于文件路径，如果用户提供的是相对路径，请基于当前工作目录理解。"""
+知识库查询工具：
+7. anythingllm_query - 向 AnythingLLM 知识库系统发送查询，获取基于文档的专业回答。当用户询问公司内部文档、项目资料、技术文档、知识库内容时使用此工具。
+
+使用指南：
+- 当用户请求执行文件操作或查询天气时，请使用相应的工具
+- 当用户询问关于公司文档、项目资料、技术规范、知识库内容等问题时，请使用 anythingllm_query 工具
+- 使用工具时，请提供准确的参数
+- 如果工具返回错误信息，请向用户说明情况
+- 对于文件路径，如果用户提供的是相对路径，请基于当前工作目录理解"""
         }
         history_manager.add_message("system", system_message["content"])
     
@@ -217,9 +234,15 @@ def chat_with_context(env_vars, user_input, history_manager, log_manager=None):
 天气查询工具：
 6. get_weather - 查询指定城市的当前天气和未来几天预报
 
-当用户请求执行文件操作或查询天气时，请使用相应的工具。使用工具时，请提供准确的参数。
-如果工具返回错误信息，请向用户说明情况。
-对于文件路径，如果用户提供的是相对路径，请基于当前工作目录理解。"""
+知识库查询工具：
+7. anythingllm_query - 向 AnythingLLM 知识库系统发送查询，获取基于文档的专业回答。当用户询问公司内部文档、项目资料、技术文档、知识库内容时使用此工具。
+
+使用指南：
+- 当用户请求执行文件操作或查询天气时，请使用相应的工具
+- 当用户询问关于公司文档、项目资料、技术规范、知识库内容等问题时，请使用 anythingllm_query 工具
+- 使用工具时，请提供准确的参数
+- 如果工具返回错误信息，请向用户说明情况
+- 对于文件路径，如果用户提供的是相对路径，请基于当前工作目录理解"""
             }
             history_manager.add_message("system", system_message["content"])
             
@@ -241,7 +264,7 @@ def chat_with_context(env_vars, user_input, history_manager, log_manager=None):
     print("=" * 60)
     
     # 第一次调用 LLM
-    response = call_llm_with_tools(base_url, model, api_key, messages, TOOLS_DEFINITION)
+    response = call_llm_with_tools(base_url, model, api_key, messages, ALL_TOOLS_DEFINITION)
     
     if not response:
         print("LLM 调用失败")
@@ -291,7 +314,7 @@ def chat_with_context(env_vars, user_input, history_manager, log_manager=None):
         
         # 第二次调用 LLM，传入工具执行结果
         messages = history_manager.get_messages()
-        final_response = call_llm_with_tools(base_url, model, api_key, messages, TOOLS_DEFINITION)
+        final_response = call_llm_with_tools(base_url, model, api_key, messages, ALL_TOOLS_DEFINITION)
         
         if final_response:
             final_choice = final_response.get('choices', [{}])[0]
@@ -329,6 +352,10 @@ def main():
         print(f"错误: {e}")
         return
     
+    # 将环境变量设置到系统中，供 anythingllm_query 使用
+    for key, value in env_vars.items():
+        os.environ[key] = value
+    
     base_url = env_vars.get('BASE_URL')
     model = env_vars.get('MODEL')
     api_key = env_vars.get('API_KEY')
@@ -354,9 +381,11 @@ def main():
     print("  4. create_file_with_content - 创建文件")
     print("  5. read_file_content - 读取文件")
     print("  6. get_weather - 查询天气")
+    print("  7. anythingllm_query - 查询 AnythingLLM 知识库")
     print("\n示例问题:")
     print("  - 列出当前目录下的所有文件")
     print("  - 北京今天的天气怎么样？")
+    print("  - 我们项目的技术规范是什么？")
     print("  - /search 天气 (搜索历史记录)")
     print("  - 查找聊天历史中关于文件的内容")
     print("-" * 60)

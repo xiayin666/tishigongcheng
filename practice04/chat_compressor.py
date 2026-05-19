@@ -84,6 +84,7 @@ def _format_messages_for_summary(messages):
                 formatted_lines.append(f"[系统消息 {i}] {content[:100]}...")
         else:
             formatted_lines.append(f"[{role.upper()} {i}] {content}")
+    
     return "\n\n".join(formatted_lines)
 
 
